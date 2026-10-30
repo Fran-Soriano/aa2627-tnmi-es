@@ -1,0 +1,46 @@
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: #ededed;
+  font-family: Arial, sans-serif;
+}
+
+body {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.toolbar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+button {
+  border: 1px solid #bbb;
+  background: #fff;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+canvas {
+  display: block;
+  width: 800px;
+  height: 600px;
+  background: #efefef;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+canvas.dragging {
+  cursor: grabbing;
+}
