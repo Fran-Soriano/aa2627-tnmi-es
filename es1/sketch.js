@@ -1,38 +1,46 @@
 // E1. Ricombinare una fotografia interattiva
 //
-// Fotografia: https://commons.wikimedia.org/wiki/File:Giuseppe_Arcimboldo_-_Rudolf_II_of_Habsburg_as_Vertumnus_-_Google_Art_Project.jpg
-// Autore: Giuseppe Arcimboldo
-// Procedimento: la fotografia parte integra; trascinando il puntatore nascono dei tasselli
-// che mostrano il frammento raccolto nel punto di partenza, spostato in un'altra posizione.
-// A ogni spostamento i tasselli alternano gruppi di uno o due esemplari a colori e in bianco e nero.
+// Fotografia: Giuseppe Arcimboldo, Rodolfo II come Vertumno
+// Fonte: Wikimedia Commons
+//
+// Procedimento:
+// La fotografia parte integra.
+// Cliccando su un punto si seleziona un tassello.
+// Il programma analizza il suo colore medio e cerca
+// automaticamente una zona cromaticamente simile.
+// Il tassello si sposta autonomamente verso la zona trovata.
+//
+// Non è previsto il trascinamento manuale.
+// Tutti i tasselli rimangono a colori.
 
 const canvasWidth = 800;
 const canvasHeight = 600;
-const tileSize = 45; // lato dei tasselli creati con il puntatore
-const groupLengths = [1, 2]; // quanti tasselli consecutivi possono avere lo stesso aspetto
+const tileSize = 45;
+
+const animationSpeed = 0.07;
+const searchStep = 15;
+const minimumDistance = 90;
 
 let photoLayer;
-let blackAndWhiteLayer;
 let tiles = [];
 let statusMessage = "Caricamento dell'immagine...";
-let selectedTile = null;
-let offsetX = 0;
-let offsetY = 0;
-let groupIsBlackAndWhite = false; // aspetto del gruppo di tasselli in corso
-let remainingInGroup = 1; // il primo gruppo è a colori
 
+// Caricamento della fotografia originale.
+// p5.js 2 non ha preload(): il caricamento va dentro async function setup()
 async function setup() {
   createCanvas(canvasWidth, canvasHeight);
   pixelDensity(1);
 
   try {
     const photo = await loadImage("./arcimboldo.png");
-    const blackAndWhitePhoto = await loadImage("./arcimboldo nero.png.jpg");
-    setPhotograph(photo, blackAndWhitePhoto);
+
+    photoLayer = makePhotoLayer(photo);
+    photoLayer.loadPixels();
+
+    statusMessage = "";
   } catch (error) {
-    console.error("Impossibile caricare le fotografie.", error);
-    statusMessage = "Immagini non trovate.";
-    loop();
+    statusMessage = "Immagine non trovata.";
+    photoLayer = null;
   }
 }
 
@@ -40,25 +48,52 @@ function draw() {
   background("#d8d6d1");
 
   if (!photoLayer) {
-    fill("#ffffff");
+    fill(255);
     noStroke();
     textSize(18);
     text(statusMessage, 24, 36);
     return;
   }
 
-  // Disegna l'immagine di sfondo di base
+  // Fotografia originale
   image(photoLayer, 0, 0);
 
-  // Disegna i tasselli creati dall'utente
+  // Disegno e animazione dei tasselli
   for (const tile of tiles) {
-    push();
-    noStroke();
 
-    // Mostra il frammento raccolto nel punto di partenza, a colori o in bianco e nero
-    const fragmentLayer = tile.blackAndWhite ? blackAndWhiteLayer : photoLayer;
+    if (!tile.arrived) {
+
+      // Movimento progressivo verso la destinazione
+      tile.x = lerp(
+        tile.x,
+        tile.targetX,
+        animationSpeed
+      );
+
+      tile.y = lerp(
+        tile.y,
+        tile.targetY,
+        animationSpeed
+      );
+
+      // Controllo dell'arrivo
+      const distance = dist(
+        tile.x,
+        tile.y,
+        tile.targetX,
+        tile.targetY
+      );
+
+      if (distance < 0.5) {
+        tile.x = tile.targetX;
+        tile.y = tile.targetY;
+        tile.arrived = true;
+      }
+    }
+
+    // Il frammento mantiene i pixel originali
     image(
-      fragmentLayer,
+      photoLayer,
       tile.x,
       tile.y,
       tile.w,
@@ -68,120 +103,213 @@ function draw() {
       tile.w,
       tile.h
     );
-
-    // Evidenzia leggermente la tessera se è selezionata
-    if (tile === selectedTile) {
-      noFill();
-      stroke(255, 200, 0, 200);
-      strokeWeight(2);
-      rect(tile.x, tile.y, tile.w, tile.h);
-    }
-    pop();
   }
 }
 
+// Selezione di un tassello tramite clic
 function mousePressed() {
+
   if (!photoLayer) return;
 
-  // Se il puntatore è già su un tassello, lo si può spostare di nuovo
-  for (let i = tiles.length - 1; i >= 0; i--) {
-    const tile = tiles[i];
-    if (
-      mouseX >= tile.x &&
-      mouseX <= tile.x + tile.w &&
-      mouseY >= tile.y &&
-      mouseY <= tile.y + tile.h
-    ) {
-      selectedTile = tile;
-      offsetX = tile.x - mouseX;
-      offsetY = tile.y - mouseY;
-      tiles.splice(i, 1);
-      tiles.push(selectedTile);
-      return;
-    }
-  }
-
-  // Altrimenti il clic crea un nuovo tassello nel punto premuto
-  const tileX = mouseX - tileSize / 2;
-  const tileY = mouseY - tileSize / 2;
-  const tile = {
-    x: tileX,
-    y: tileY,
-    w: tileSize,
-    h: tileSize,
-    // il frammento è quello che sta sotto il puntatore al momento del clic
-    sourceX: constrain(tileX, 0, canvasWidth - tileSize),
-    sourceY: constrain(tileY, 0, canvasHeight - tileSize),
-    blackAndWhite: false,
-    moved: false
-  };
-
-  selectedTile = tile;
-  offsetX = -tileSize / 2;
-  offsetY = -tileSize / 2;
-  tiles.push(tile);
-}
-
-function mouseDragged() {
-  if (!selectedTile) return;
-
-  // Il sorteggio avviene al primo movimento, non con il semplice clic
-  if (!selectedTile.moved) {
-    selectedTile.blackAndWhite = nextBlackAndWhiteChoice();
-    selectedTile.moved = true;
-  }
-
-  selectedTile.x = mouseX + offsetX;
-  selectedTile.y = mouseY + offsetY;
-}
-
-// Alterna gruppi di 1 o 2 tasselli dello stesso aspetto: così il bianco e nero
-// non compare mai per più di due tasselli di seguito
-function nextBlackAndWhiteChoice() {
-  if (remainingInGroup === 0) {
-    groupIsBlackAndWhite = !groupIsBlackAndWhite;
-    remainingInGroup = random(groupLengths);
-  }
-  remainingInGroup -= 1;
-  return groupIsBlackAndWhite;
-}
-
-function mouseReleased() {
-  if (!selectedTile) return;
-
-  // Un semplice clic, senza trascinamento, non aggiunge nessun tassello
-  if (!selectedTile.moved) {
-    const index = tiles.indexOf(selectedTile);
-    if (index !== -1) tiles.splice(index, 1);
-    selectedTile = null;
+  // Evita clic fuori dal canvas
+  if (
+    mouseX < 0 ||
+    mouseX >= canvasWidth ||
+    mouseY < 0 ||
+    mouseY >= canvasHeight
+  ) {
     return;
   }
 
-  selectedTile = null;
+  // Posizione iniziale del tassello
+  const tileX = constrain(
+    mouseX - tileSize / 2,
+    0,
+    canvasWidth - tileSize
+  );
+
+  const tileY = constrain(
+    mouseY - tileSize / 2,
+    0,
+    canvasHeight - tileSize
+  );
+
+  // Analizza il colore medio del frammento
+  const sourceColor = getAverageColor(
+    tileX,
+    tileY,
+    tileSize,
+    tileSize
+  );
+
+  // Cerca una zona cromaticamente simile
+  const destination = findSimilarArea(
+    tileX,
+    tileY,
+    sourceColor
+  );
+
+  // Crea il tassello
+  const tile = {
+    x: tileX,
+    y: tileY,
+
+    w: tileSize,
+    h: tileSize,
+
+    sourceX: tileX,
+    sourceY: tileY,
+
+    targetX: destination.x,
+    targetY: destination.y,
+
+    arrived: false
+  };
+
+  tiles.push(tile);
 }
 
-function setPhotograph(photo, blackAndWhitePhoto) {
-  photoLayer = makePhotoLayer(photo);
-  // stessa fotografia in bianco e nero, usata dai tasselli sorteggiati
-  blackAndWhiteLayer = makePhotoLayer(blackAndWhitePhoto);
+// Calcola il colore medio di una zona
+function getAverageColor(x, y, w, h) {
 
-  tiles = [];
-  statusMessage = "";
-  loop();
+  let totalR = 0;
+  let totalG = 0;
+  let totalB = 0;
+  let count = 0;
+
+  const startX = floor(x);
+  const startY = floor(y);
+
+  // Campionamento dei pixel
+  for (let py = startY; py < startY + h; py += 3) {
+    for (let px = startX; px < startX + w; px += 3) {
+
+      const index = 4 * (
+        py * canvasWidth + px
+      );
+
+      totalR += photoLayer.pixels[index];
+      totalG += photoLayer.pixels[index + 1];
+      totalB += photoLayer.pixels[index + 2];
+
+      count++;
+    }
+  }
+
+  return {
+    r: totalR / count,
+    g: totalG / count,
+    b: totalB / count
+  };
 }
 
-// Ridimensiona la foto sul canvas e la disegna su un livello a sé stante
+// Confronta due colori
+function colorDistance(colorA, colorB) {
+
+  const differenceR = colorA.r - colorB.r;
+  const differenceG = colorA.g - colorB.g;
+  const differenceB = colorA.b - colorB.b;
+
+  // Distanza cromatica RGB
+  return sqrt(
+    differenceR * differenceR +
+    differenceG * differenceG +
+    differenceB * differenceB
+  );
+}
+
+// Cerca la zona più simile cromaticamente
+function findSimilarArea(sourceX, sourceY, sourceColor) {
+
+  let bestX = sourceX;
+  let bestY = sourceY;
+
+  let bestDifference = Infinity;
+
+  // Analizza diverse zone della fotografia
+  for (
+    let y = 0;
+    y <= canvasHeight - tileSize;
+    y += searchStep
+  ) {
+
+    for (
+      let x = 0;
+      x <= canvasWidth - tileSize;
+      x += searchStep
+    ) {
+
+      // Evita zone troppo vicine all'origine
+      const spatialDistance = dist(
+        sourceX,
+        sourceY,
+        x,
+        y
+      );
+
+      if (spatialDistance < minimumDistance) {
+        continue;
+      }
+
+      // Calcola il colore medio della zona candidata
+      const candidateColor = getAverageColor(
+        x,
+        y,
+        tileSize,
+        tileSize
+      );
+
+      // Misura la differenza cromatica
+      const difference = colorDistance(
+        sourceColor,
+        candidateColor
+      );
+
+      // Conserva la zona più simile
+      if (difference < bestDifference) {
+
+        bestDifference = difference;
+
+        bestX = x;
+        bestY = y;
+      }
+    }
+  }
+
+  return {
+    x: bestX,
+    y: bestY
+  };
+}
+
+// Ridimensiona la fotografia per riempire il canvas
 function makePhotoLayer(photo) {
-  const scale = Math.max(canvasWidth / photo.width, canvasHeight / photo.height);
+
+  const scale = Math.max(
+    canvasWidth / photo.width,
+    canvasHeight / photo.height
+  );
+
   const imageWidth = photo.width * scale;
   const imageHeight = photo.height * scale;
+
   const imageX = (canvasWidth - imageWidth) / 2;
   const imageY = (canvasHeight - imageHeight) / 2;
 
-  const layer = createGraphics(canvasWidth, canvasHeight);
+  const layer = createGraphics(
+    canvasWidth,
+    canvasHeight
+  );
+
   layer.pixelDensity(1);
-  layer.image(photo, imageX, imageY, imageWidth, imageHeight);
+
+  layer.image(
+    photo,
+    imageX,
+    imageY,
+    imageWidth,
+    imageHeight
+  );
 
   return layer;
 }
-
