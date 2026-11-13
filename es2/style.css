@@ -1,0 +1,17 @@
+html,
+body {
+  margin: 0;
+}
+
+/* la tela sta al centro della finestra, qualunque sia la sua misura */
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e8e8e8;
+}
+
+canvas {
+  display: block;
+}
