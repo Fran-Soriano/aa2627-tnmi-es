@@ -1,14 +1,15 @@
 
 // E2. Poesia concreta generativa
 //
-// Testo: testo proprio («MAKE GOOD THINGS HAPPEN»)
-// Font: Sigana Condensed, https://www.dafont.com/sigana.font
+// MAKE GOOD THINGS HAPPEN
 //
-// Composizione: nove righe di parole ripetute che scorrono in
-// direzioni alternate. Le parole cambiano dimensione nel tempo e
-// si ingrandiscono vicino al mouse, influenzando anche le righe vicine.
+// Font: Sigana Condensed
+// Canvas: 800 x 600
 //
-// Canvas: 800 x 600 pixel
+// Parole rosso fucsia.
+// Intersezioni fra righe diverse: arancione.
+// Animazione autonoma, interazione mouse,
+// rimpicciolimento lento e pause ritmiche.
 
 // ==========================================
 // PARAMETRI
@@ -19,6 +20,7 @@ const H = 600;
 
 const CARTA = "#EFE8DA";
 const ROSSO = "#FF0046";
+const ARANCIONE = "#FF8C00";
 
 const FILE_ROSSO = "Sigana Condensed.otf";
 
@@ -31,36 +33,39 @@ const PAROLE = [
 
 const N_RIGHE = 9;
 
-// Tre dimensioni di base
+// Tre dimensioni
 const GRANDE = 1.45;
 const MEDIA = 1.00;
 const PICCOLA = 0.58;
 
-// Velocità dello scorrimento
+// Movimento orizzontale
 const VELOCITA = 38;
 
 // Animazione autonoma
 const VELOCITA_RESPIRO = 1.25;
 const INTENSITA_RESPIRO = 0.30;
 
-// Seconda onda per un movimento più organico
 const VELOCITA_ONDA = 0.72;
 const INTENSITA_ONDA = 0.12;
 
-// Interazione mouse enfatizzata
+// Interazione mouse
 const RAGGIO_MOUSE = 185;
 const FORZA_MOUSE = 0.95;
 
-// Influenza delle righe vicine
+// Influenza righe vicine
 const FORZA_VICINI = 0.32;
 
-// Fluidità delle transizioni
-const REATTIVITA = 9;
+// Crescita e riduzione
+const REATTIVITA_CRESCITA = 10;
+const REATTIVITA_RIDUZIONE = 3.2;
 
-// Spazio fra le parole
+// Pause ritmiche
+const DURATA_CICLO = 11;
+const INIZIO_PAUSA = 6;
+const FINE_PAUSA = 9;
+const VELOCITA_MINIMA = 0.18;
+
 const SPAZIO_PAROLE = 18;
-
-// Dimensione di riferimento
 const REF_TESTO = 100;
 
 // ==========================================
@@ -78,6 +83,19 @@ let centroFont = -35;
 let mouseAttivo = false;
 let influenzaMouse = 0;
 
+let tempoAnimazione = 0;
+
+// Livello grafico temporaneo
+let livelloRiga;
+
+// Array riutilizzati per rilevare
+// le sovrapposizioni pixel per pixel
+let occupazione;
+let intersezioni;
+
+// Immagine finale aggiornata nei pixel
+let immagineFinale;
+
 // ==========================================
 // SETUP
 // ==========================================
@@ -88,7 +106,6 @@ async function setup() {
 
   pixelDensity(1);
   frameRate(60);
-
   noStroke();
 
   fontRosso = await loadFont(FILE_ROSSO);
@@ -96,6 +113,15 @@ async function setup() {
   misuraFont();
   preparaImmagini();
   preparaRighe();
+
+  livelloRiga = createGraphics(W, H);
+  livelloRiga.pixelDensity(1);
+
+  occupazione = new Uint8Array(W * H);
+  intersezioni = new Uint8Array(W * H);
+
+  immagineFinale = createImage(W, H);
+  immagineFinale.loadPixels();
 }
 
 // ==========================================
@@ -104,15 +130,66 @@ async function setup() {
 
 function draw() {
 
-  background(CARTA);
-
-  const tempo = millis() / 1000;
-
   const dt = min(deltaTime / 1000, 0.05);
 
-  aggiornaMovimento(tempo, dt);
+  const fattoreVelocita =
+    calcolaRallentamento();
+
+  tempoAnimazione += dt * fattoreVelocita;
+
+  aggiornaMovimento(
+    tempoAnimazione,
+    dt,
+    fattoreVelocita
+  );
 
   disegnaComposizione();
+}
+
+// ==========================================
+// RALLENTAMENTO PERIODICO
+// ==========================================
+
+function calcolaRallentamento() {
+
+  const fase =
+    (millis() / 1000) % DURATA_CICLO;
+
+  if (fase < INIZIO_PAUSA - 1) {
+    return 1;
+  }
+
+  if (fase < INIZIO_PAUSA) {
+
+    const t =
+      fase - (INIZIO_PAUSA - 1);
+
+    const morbido =
+      t * t * (3 - 2 * t);
+
+    return lerp(
+      1,
+      VELOCITA_MINIMA,
+      morbido
+    );
+  }
+
+  if (fase < FINE_PAUSA) {
+    return VELOCITA_MINIMA;
+  }
+
+  const t =
+    (fase - FINE_PAUSA) /
+    (DURATA_CICLO - FINE_PAUSA);
+
+  const morbido =
+    t * t * (3 - 2 * t);
+
+  return lerp(
+    VELOCITA_MINIMA,
+    1,
+    morbido
+  );
 }
 
 // ==========================================
@@ -138,12 +215,13 @@ function misuraFont() {
     240
   );
 
-  const dati = prova.drawingContext.getImageData(
-    0,
-    0,
-    prova.width,
-    prova.height
-  ).data;
+  const dati =
+    prova.drawingContext.getImageData(
+      0,
+      0,
+      prova.width,
+      prova.height
+    ).data;
 
   let minY = prova.height;
   let maxY = 0;
@@ -163,20 +241,25 @@ function misuraFont() {
     }
   }
 
-  altezzaFont = max(1, maxY - minY + 1);
+  altezzaFont = max(
+    1,
+    maxY - minY + 1
+  );
 
-  centroFont = (minY + maxY) / 2 - 240;
+  centroFont =
+    (minY + maxY) / 2 - 240;
 
   prova.remove();
 }
 
 // ==========================================
-// PREPARAZIONE IMMAGINI
+// PREPARAZIONE IMMAGINI PAROLE
 // ==========================================
 
 function preparaImmagini() {
 
-  const misura = createGraphics(1200, 300);
+  const misura =
+    createGraphics(1200, 300);
 
   misura.pixelDensity(1);
   misura.textFont(fontRosso);
@@ -191,14 +274,16 @@ function preparaImmagini() {
     const margine = 8;
 
     const larghezza =
-      ceil(larghezzaTesto) + margine * 2;
+      ceil(larghezzaTesto) +
+      margine * 2;
 
     const altezza = 150;
 
-    const livello = createGraphics(
-      larghezza,
-      altezza
-    );
+    const livello =
+      createGraphics(
+        larghezza,
+        altezza
+      );
 
     livello.pixelDensity(1);
     livello.clear();
@@ -221,9 +306,9 @@ function preparaImmagini() {
 
     immaginiParole[parola] = {
       immagine: livello,
-      larghezza: larghezza,
-      altezza: altezza,
-      larghezzaTesto: larghezzaTesto
+      larghezza,
+      altezza,
+      larghezzaTesto
     };
   }
 
@@ -253,8 +338,12 @@ function preparaRighe() {
   for (let i = 0; i < N_RIGHE; i++) {
 
     const corpoBase =
-      (interlinea * 0.75 * REF_TESTO /
-        altezzaFont) * dimensioni[i];
+      (
+        interlinea *
+        0.75 *
+        REF_TESTO /
+        altezzaFont
+      ) * dimensioni[i];
 
     const parole = [];
 
@@ -267,9 +356,10 @@ function preparaRighe() {
         scala: 1,
         obiettivo: 1,
 
-        fase: i * 1.37 + j * 1.83,
+        fase:
+          i * 1.37 + j * 1.83,
 
-        corpoBase: corpoBase,
+        corpoBase,
 
         x: 0,
         y: interlinea * (i + 0.5),
@@ -284,14 +374,16 @@ function preparaRighe() {
 
       y: interlinea * (i + 0.5),
 
-      direzione: i % 2 === 0 ? 1 : -1,
+      direzione:
+        i % 2 === 0 ? 1 : -1,
 
       velocita:
-        VELOCITA * (0.85 + i * 0.05),
+        VELOCITA *
+        (0.85 + i * 0.05),
 
       offset: i * 110,
 
-      parole: parole,
+      parole,
 
       larghezzaTotale: 1
     });
@@ -299,15 +391,15 @@ function preparaRighe() {
 }
 
 // ==========================================
-// AGGIORNAMENTO ANIMAZIONE
+// AGGIORNAMENTO MOVIMENTO
 // ==========================================
 
-function aggiornaMovimento(tempo, dt) {
+function aggiornaMovimento(
+  tempo,
+  dt,
+  velocita
+) {
 
-  const morbidezza =
-    1 - exp(-REATTIVITA * dt);
-
-  // Attivazione graduale del mouse
   const mouseDentro =
     mouseAttivo &&
     mouseX >= 0 &&
@@ -315,63 +407,68 @@ function aggiornaMovimento(tempo, dt) {
     mouseY >= 0 &&
     mouseY < H;
 
-  const obiettivoMouse = mouseDentro ? 1 : 0;
+  const obiettivoMouse =
+    mouseDentro ? 1 : 0;
 
   influenzaMouse +=
-    (obiettivoMouse - influenzaMouse)
-    * (1 - exp(-6 * dt));
+    (obiettivoMouse - influenzaMouse) *
+    (1 - exp(-6 * dt));
 
-  // Posizioni attuali
   for (const riga of righe) {
     calcolaPosizioni(riga);
   }
 
-  // Calcolo simultaneo degli obiettivi
+  // Obiettivi delle dimensioni
   for (let i = 0; i < righe.length; i++) {
 
     const riga = righe[i];
 
-    for (let j = 0; j < riga.parole.length; j++) {
+    for (
+      let j = 0;
+      j < riga.parole.length;
+      j++
+    ) {
 
       const parola = riga.parole[j];
 
-      // Prima onda autonoma
       const respiro = sin(
         tempo * VELOCITA_RESPIRO +
         parola.fase
       );
 
-      // Seconda onda autonoma
       const onda = sin(
         tempo * VELOCITA_ONDA +
         parola.fase * 1.73
       );
 
-      // Le parole cambiano dimensione
-      // anche senza alcuna interazione
       let obiettivo =
         1 +
         respiro * INTENSITA_RESPIRO +
         onda * INTENSITA_ONDA;
 
-      // Interazione enfatizzata
+      // Mouse: ingrandimento enfatizzato
       if (influenzaMouse > 0.001) {
 
         const distanza =
-          distanzaMouseParola(riga, parola);
+          distanzaMouseParola(
+            riga,
+            parola
+          );
 
         const influenza = exp(
-          -pow(distanza / RAGGIO_MOUSE, 2)
+          -pow(
+            distanza / RAGGIO_MOUSE,
+            2
+          )
         );
 
-        // Ingrandimento molto più evidente
         obiettivo +=
           influenza *
           FORZA_MOUSE *
           influenzaMouse;
       }
 
-      // Influenza delle righe adiacenti
+      // Influenza righe vicine
       let compensazione = 0;
 
       for (const k of [-1, 1]) {
@@ -388,8 +485,6 @@ function aggiornaMovimento(tempo, dt) {
         const vicino =
           righe[indiceVicino].parole[j];
 
-        // Se la parola vicina cresce,
-        // questa tende a rimpicciolirsi
         compensazione -=
           (vicino.scala - 1) *
           FORZA_VICINI;
@@ -397,7 +492,6 @@ function aggiornaMovimento(tempo, dt) {
 
       obiettivo += compensazione;
 
-      // Limiti delle dimensioni
       parola.obiettivo = constrain(
         obiettivo,
         0.55,
@@ -406,24 +500,41 @@ function aggiornaMovimento(tempo, dt) {
     }
   }
 
-  // Applica gli ingrandimenti
+  // Crescita rapida, riduzione lenta
   for (const riga of righe) {
 
     for (const parola of riga.parole) {
 
+      const staCrescendo =
+        parola.obiettivo >
+        parola.scala;
+
+      const reattivita =
+        staCrescendo
+          ? REATTIVITA_CRESCITA
+          : REATTIVITA_RIDUZIONE;
+
+      const morbidezza =
+        1 - exp(
+          -reattivita *
+          dt *
+          (0.55 + 0.45 * velocita)
+        );
+
       parola.scala +=
-        (parola.obiettivo - parola.scala)
-        * morbidezza;
+        (
+          parola.obiettivo -
+          parola.scala
+        ) * morbidezza;
     }
 
-    // Movimento orizzontale continuo
     riga.offset +=
       riga.velocita *
       riga.direzione *
-      dt;
+      dt *
+      velocita;
   }
 
-  // Aggiorna le posizioni
   for (const riga of righe) {
     calcolaPosizioni(riga);
   }
@@ -443,21 +554,25 @@ function calcolaPosizioni(riga) {
       immaginiParole[parola.testo];
 
     const scala =
-      (parola.corpoBase / REF_TESTO)
-      * parola.scala;
+      (
+        parola.corpoBase /
+        REF_TESTO
+      ) * parola.scala;
 
     parola.larghezza =
       dati.larghezzaTesto * scala;
 
     larghezzaTotale +=
-      parola.larghezza + SPAZIO_PAROLE;
+      parola.larghezza +
+      SPAZIO_PAROLE;
   }
 
   riga.larghezzaTotale =
     max(1, larghezzaTotale);
 
   let posizione =
-    riga.offset % riga.larghezzaTotale;
+    riga.offset %
+    riga.larghezzaTotale;
 
   if (posizione < 0) {
     posizione += riga.larghezzaTotale;
@@ -473,17 +588,22 @@ function calcolaPosizioni(riga) {
     parola.y = riga.y;
 
     x +=
-      parola.larghezza + SPAZIO_PAROLE;
+      parola.larghezza +
+      SPAZIO_PAROLE;
   }
 }
 
 // ==========================================
-// DISTANZA DEL MOUSE
+// DISTANZA MOUSE
 // ==========================================
 
-function distanzaMouseParola(riga, parola) {
+function distanzaMouseParola(
+  riga,
+  parola
+) {
 
-  const periodo = riga.larghezzaTotale;
+  const periodo =
+    riga.larghezzaTotale;
 
   const differenza =
     mouseX - parola.x;
@@ -503,61 +623,163 @@ function distanzaMouseParola(riga, parola) {
 }
 
 // ==========================================
-// DISEGNO DELLA COMPOSIZIONE
+// DISEGNO DELLA SINGOLA RIGA
+// ==========================================
+
+function disegnaRiga(riga) {
+
+  livelloRiga.clear();
+  livelloRiga.imageMode(CENTER);
+
+  const periodo =
+    riga.larghezzaTotale;
+
+  if (periodo <= 0) return;
+
+  const copie =
+    ceil(W / periodo) + 2;
+
+  for (const parola of riga.parole) {
+
+    const dati =
+      immaginiParole[parola.testo];
+
+    const scala =
+      (
+        parola.corpoBase /
+        REF_TESTO
+      ) * parola.scala;
+
+    const larghezza =
+      dati.larghezza * scala;
+
+    const altezza =
+      dati.altezza * scala;
+
+    for (
+      let k = -copie;
+      k <= copie;
+      k++
+    ) {
+
+      const x =
+        parola.x + k * periodo;
+
+      if (
+        x + larghezza / 2 < 0 ||
+        x - larghezza / 2 > W
+      ) {
+        continue;
+      }
+
+      livelloRiga.image(
+        dati.immagine,
+        x,
+        parola.y,
+        larghezza,
+        altezza
+      );
+    }
+  }
+}
+
+// ==========================================
+// DISEGNO CON INTERSEZIONI ARANCIONI
 // ==========================================
 
 function disegnaComposizione() {
 
-  imageMode(CENTER);
+  // Azzera le maschere
+  occupazione.fill(0);
+  intersezioni.fill(0);
+
+  // Analizza una riga per volta.
+  // In questo modo contiamo soltanto
+  // le sovrapposizioni fra righe diverse.
 
   for (const riga of righe) {
 
-    const periodo = riga.larghezzaTotale;
+    disegnaRiga(riga);
 
-    if (periodo <= 0) continue;
+    livelloRiga.loadPixels();
 
-    const copie =
-      ceil(W / periodo) + 2;
+    const pixels = livelloRiga.pixels;
 
-    for (const parola of riga.parole) {
+    for (let i = 0; i < W * H; i++) {
 
-      const dati =
-        immaginiParole[parola.testo];
+      const alpha =
+        pixels[i * 4 + 3];
 
-      const scala =
-        (parola.corpoBase / REF_TESTO)
-        * parola.scala;
+      // Soglia per riconoscere
+      // la presenza di una lettera
+      if (alpha > 25) {
 
-      const larghezza =
-        dati.larghezza * scala;
+        if (occupazione[i] > 0) {
 
-      const altezza =
-        dati.altezza * scala;
-
-      for (let k = -copie; k <= copie; k++) {
-
-        const x =
-          parola.x + k * periodo;
-
-        if (
-          x + larghezza / 2 < 0 ||
-          x - larghezza / 2 > W
-        ) {
-          continue;
+          // Questo pixel appartiene
+          // ad almeno due righe
+          intersezioni[i] = 1;
         }
 
-        image(
-          dati.immagine,
-          x,
-          parola.y,
-          larghezza,
-          altezza
-        );
+        occupazione[i] = 1;
       }
     }
   }
 
-  imageMode(CORNER);
+  // Colori della composizione finale
+  const sfondoR = 239;
+  const sfondoG = 232;
+  const sfondoB = 218;
+
+  const rossoR = 255;
+  const rossoG = 0;
+  const rossoB = 70;
+
+  const arancioR = 255;
+  const arancioG = 140;
+  const arancioB = 0;
+
+  immagineFinale.loadPixels();
+
+  const pixelsFinali =
+    immagineFinale.pixels;
+
+  for (let i = 0; i < W * H; i++) {
+
+    const indice = i * 4;
+
+    if (intersezioni[i]) {
+
+      // Intersezione: arancione
+      pixelsFinali[indice] = arancioR;
+      pixelsFinali[indice + 1] = arancioG;
+      pixelsFinali[indice + 2] = arancioB;
+
+    } else if (occupazione[i]) {
+
+      // Testo normale: rosso
+      pixelsFinali[indice] = rossoR;
+      pixelsFinali[indice + 1] = rossoG;
+      pixelsFinali[indice + 2] = rossoB;
+
+    } else {
+
+      // Sfondo bianco sporco
+      pixelsFinali[indice] = sfondoR;
+      pixelsFinali[indice + 1] = sfondoG;
+      pixelsFinali[indice + 2] = sfondoB;
+    }
+
+    pixelsFinali[indice + 3] = 255;
+  }
+
+  immagineFinale.updatePixels();
+
+  image(
+    immagineFinale,
+    0,
+    0
+  );
 }
 
 // ==========================================
