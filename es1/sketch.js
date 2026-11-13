@@ -1,7 +1,8 @@
+
 // E1. Ricombinare una fotografia interattiva
 //
-// Fotografia: Giuseppe Arcimboldo, Rodolfo II come Vertumno
-// Fonte: Wikimedia Commons
+// Fotografia: https://commons.wikimedia.org/wiki/File:Giuseppe_Arcimboldo_-_Rudolf_II_of_Habsburg_as_Vertumnus_-_Google_Art_Project.jpg
+// Autore: Giuseppe Arcimboldo
 //
 // Procedimento:
 // La fotografia parte integra.
@@ -25,14 +26,24 @@ let photoLayer;
 let tiles = [];
 let statusMessage = "Caricamento dell'immagine...";
 
-// Caricamento della fotografia originale.
-// p5.js 2 non ha preload(): il caricamento va dentro async function setup()
+// Puntatore personalizzato
+let mousePointer;
+let pointerMoved = false;
+
+// Caricamento delle immagini
+// p5.js 2 utilizza async function setup()
 async function setup() {
   createCanvas(canvasWidth, canvasHeight);
   pixelDensity(1);
 
+  // Nasconde il cursore originale
+  noCursor();
+
   try {
     const photo = await loadImage("./arcimboldo.png");
+
+    // Carica il puntatore PNG
+    mousePointer = await loadImage("./puntatore.png");
 
     photoLayer = makePhotoLayer(photo);
     photoLayer.loadPixels();
@@ -104,6 +115,50 @@ function draw() {
       tile.h
     );
   }
+
+  // PUNTATORE PERSONALIZZATO
+  // Posizione iniziale: basso al centro
+
+  if (mousePointer) {
+    push();
+
+    imageMode(CORNER);
+
+    if (!pointerMoved) {
+
+      // Posizione iniziale del puntatore
+      image(
+        mousePointer,
+        canvasWidth / 2 - 30,
+        canvasHeight - 85,
+        60,
+        60
+      );
+
+    } else if (
+      mouseX >= 0 &&
+      mouseX < canvasWidth &&
+      mouseY >= 0 &&
+      mouseY < canvasHeight
+    ) {
+
+      // Il puntatore segue il mouse
+      image(
+        mousePointer,
+        mouseX - 30,
+        mouseY - 25,
+        60,
+        60
+      );
+    }
+
+    pop();
+  }
+}
+
+// Rileva il movimento del mouse
+function mouseMoved() {
+  pointerMoved = true;
 }
 
 // Selezione di un tassello tramite clic
